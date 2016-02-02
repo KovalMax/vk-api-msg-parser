@@ -104,7 +104,7 @@ class Auth:
         return history
 
 
-object = Auth('5255792', 'http://oauth.vk.com/blank.html', 'touch', '9999999', 'token', '5.44')
+object = Auth('your client-id', 'http://oauth.vk.com/blank.html', 'touch', '9999999', 'token', '5.44')
 
 auth = object.authUrl(object.login, object.password)
 
