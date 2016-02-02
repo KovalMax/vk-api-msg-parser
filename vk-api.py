@@ -1,4 +1,6 @@
-import urllib2, json, sys, cookielib, urllib
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+import urllib2, json, sys, cookielib, urllib, datetime
 from urlparse import urlparse
 from HTMLParser import HTMLParser
 
@@ -53,6 +55,9 @@ class Auth:
             urllib2.HTTPCookieProcessor(cookielib.CookieJar()),
             urllib2.HTTPRedirectHandler()
         )
+        self.login = 'your login'
+        self.password = 'your password'
+        self.userToParse = 'your friend-id' 
 
     def authUrl(self, email, password):
         url = 'https://oauth.vk.com/authorize?'
@@ -93,12 +98,27 @@ class Auth:
         dialogs = urllib2.urlopen(dialogUrl).read()
         return dialogs
 
+    def getHistory(self, userId, count, reverse, token):
+        historyUrl = 'https://api.vk.com/method/messages.getHistory?user_id=%s&count=%s&rev=%s&v=5.44&access_token=%s' % (userId, count, reverse, token)
+        history = urllib2.urlopen(historyUrl).read()
+        return history
+
+
 object = Auth('5255792', 'http://oauth.vk.com/blank.html', 'touch', '9999999', 'token', '5.44')
 
-auth = object.authUrl('vk-login', 'pass')
+auth = object.authUrl(object.login, object.password)
 
 giveAccess = object.giveAccess(auth)
 
 token = object.returnToken(giveAccess)
 
-print object.getDialogs('20', token)
+file_log = open('someFile.txt', 'a+')
+file_log.truncate(0)
+
+userHistory = json.loads(object.getHistory(object.userToParse, '200', '1', token))
+
+for item in userHistory['response']['items']:
+    date = datetime.datetime.fromtimestamp(int(item.get('date'))).strftime('%d-%m-%Y %H:%M:%S')
+    file_log.write(date + '\t' + item.get('body').encode('utf-8', 'ignore') + '\n')
+
+file_log.close()
