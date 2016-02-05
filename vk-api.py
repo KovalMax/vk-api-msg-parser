@@ -2,43 +2,8 @@
 # -*- coding: utf-8 -*-
 import urllib2, json, sys, cookielib, urllib, datetime
 from urlparse import urlparse
-from HTMLParser import HTMLParser
-
-class FormParser(HTMLParser):
-    def __init__(self):
-        HTMLParser.__init__(self)
-        self.url = None
-        self.params = {}
-        self.in_form = False
-        self.form_parsed = False
-        self.method = "GET"
-
-    def handle_starttag(self, tag, attrs):
-        tag = tag.lower()
-        if tag == "form":
-            if self.form_parsed:
-                raise RuntimeError("Second form on page")
-            if self.in_form:
-                raise RuntimeError("Already in form")
-            self.in_form = True
-        if not self.in_form:
-            return
-        attrs = dict((name.lower(), value) for name, value in attrs)
-        if tag == "form":
-            self.url = attrs["action"]
-            if "method" in attrs:
-                self.method = attrs["method"].upper()
-        elif tag == "input" and "type" in attrs and "name" in attrs:
-            if attrs["type"] in ["hidden", "text", "password"]:
-                self.params[attrs["name"]] = attrs["value"] if "value" in attrs else ""
-
-    def handle_endtag(self, tag):
-        tag = tag.lower()
-        if tag == "form":
-            if not self.in_form:
-                raise RuntimeError("Unexpected end of <form>")
-            self.in_form = False
-            self.form_parsed = True
+from formparser import FormParser
+from config import Credentials
 
 class Auth:
     def __init__(self, clientId, redirect, display, permissions, responseType, version):
@@ -55,9 +20,8 @@ class Auth:
             urllib2.HTTPCookieProcessor(cookielib.CookieJar()),
             urllib2.HTTPRedirectHandler()
         )
-        self.login = 'your login'
-        self.password = 'your password'
-        self.userToParse = 'your friend-id' 
+        self.login = Credentials.login
+        self.password = Credentials.password
 
     def authUrl(self, email, password):
         url = 'https://oauth.vk.com/authorize?'
@@ -99,12 +63,21 @@ class Auth:
         return dialogs
 
     def getHistory(self, userId, count, reverse, token):
+        self.currentParseId = userId
         historyUrl = 'https://api.vk.com/method/messages.getHistory?user_id=%s&count=%s&rev=%s&v=5.44&access_token=%s' % (userId, count, reverse, token)
         history = urllib2.urlopen(historyUrl).read()
         return history
 
+    def getUserName(self, token):
+        userUrl = 'https://api.vk.com/method/users.get?user_ids=%s&v=5.44&access_token=%s' % (self.currentParseId, token)
+        user = urllib2.urlopen(userUrl).read()
+        user = json.loads(user)
+        for chatName in user['response']:
+            user = chatName['first_name'] + ' ' + chatName['last_name'] + ': '
+            self.fileName = 'chat' + chatName['first_name'] + chatName['last_name'] + '.txt'
+        return user
 
-object = Auth('your client-id', 'http://oauth.vk.com/blank.html', 'touch', '9999999', 'token', '5.44')
+object = Auth('5255792', 'http://oauth.vk.com/blank.html', 'touch', '9999999', 'token', '5.44')
 
 auth = object.authUrl(object.login, object.password)
 
@@ -112,13 +85,40 @@ giveAccess = object.giveAccess(auth)
 
 token = object.returnToken(giveAccess)
 
-file_log = open('someFile.txt', 'a+')
-file_log.truncate(0)
+userHistory = json.loads(object.getHistory('id of user to parse messages', '200', '1', token))
 
-userHistory = json.loads(object.getHistory(object.userToParse, '200', '1', token))
+chatName = object.getUserName(token)
+
+file_log = open(object.fileName, 'a+')
 
 for item in userHistory['response']['items']:
+    fromUser = chatName if item.get('from_id') == item.get('user_id') else 'Me: '
+    
     date = datetime.datetime.fromtimestamp(int(item.get('date'))).strftime('%d-%m-%Y %H:%M:%S')
-    file_log.write(date + '\t' + item.get('body').encode('utf-8', 'ignore') + '\n')
 
+    file_log.write(
+        date 
+        + '\t'
+        + fromUser.encode('utf-8', 'ignore')
+        + '\t'
+        + item.get('body').encode('utf-8', 'ignore')
+    )
+
+    if(item.get('attachments')):
+        for attach in item.get('attachments'):
+            if attach['type'] == 'sticker':
+                file_log.write('\t' + attach['type'] + ': ' + attach['sticker']['photo_64'])
+            elif attach['type'] == 'photo':
+                photoLink = attach['photo']['photo_1280'] if 'photo_1280' in attach['photo'] else attach['photo']['photo_807']
+                file_log.write('\t' + attach['type'] + ': ' + photoLink)
+            elif attach['type'] == 'link':
+                file_log.write('\t' + attach['type'] + ': ' + attach['link']['url'])
+            else:
+                file_log.write('\t' + attach['type'])
+                
+    if(item.get('emoji')):
+        file_log.write('\t' + 'here must be a smile :)')
+    file_log.write('\n')
+
+file_log.write('------------------------------------------------------'*2 + '\n')
 file_log.close()
