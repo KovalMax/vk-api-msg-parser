@@ -77,7 +77,7 @@ class Auth:
             self.fileName = 'chat' + chatName['first_name'] + chatName['last_name'] + '.txt'
         return user
 
-object = Auth('5255792', 'http://oauth.vk.com/blank.html', 'touch', '9999999', 'token', '5.44')
+object = Auth('client id of your app in vk', 'http://oauth.vk.com/blank.html', 'touch', '9999999', 'token', '5.44')
 
 auth = object.authUrl(object.login, object.password)
 
