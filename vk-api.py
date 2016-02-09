@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-import urllib2, json, sys, cookielib, urllib, datetime
+import urllib2, json, sys, cookielib, urllib, datetime, time
 from urlparse import urlparse
 from formparser import FormParser
 from config import Credentials
@@ -20,10 +20,12 @@ class Auth:
             urllib2.HTTPCookieProcessor(cookielib.CookieJar()),
             urllib2.HTTPRedirectHandler()
         )
+        self.offset = 0
+        self.count = 200
         self.login = Credentials.login
         self.password = Credentials.password
 
-    def authUrl(self, email, password):
+    def authUrl(self):
         url = 'https://oauth.vk.com/authorize?'
 
         for param in self.data:
@@ -35,8 +37,8 @@ class Auth:
         parser = FormParser()
         parser.feed(form)
         parser.close
-        parser.params['email'] = email
-        parser.params['pass'] = password
+        parser.params['email'] = self.login
+        parser.params['pass'] = self.password
 
         auth = self.opener.open(parser.url, urllib.urlencode(parser.params))
         return auth.read()
@@ -57,14 +59,10 @@ class Auth:
         result = dict(self.splitKeyValue(kvPair) for kvPair in urlparse(url).fragment.split('&'))
         return result['access_token']
 
-    def getDialogs(self, count, token):
-        dialogUrl = 'https://api.vk.com/method/messages.getDialogs?count=%s&preview_length=0&v=5.44&access_token=%s' % (count, token)
-        dialogs = urllib2.urlopen(dialogUrl).read()
-        return dialogs
-
-    def getHistory(self, userId, count, reverse, token):
+    def getHistory(self, userId, reverse, token):
         self.currentParseId = userId
-        historyUrl = 'https://api.vk.com/method/messages.getHistory?user_id=%s&count=%s&rev=%s&v=5.44&access_token=%s' % (userId, count, reverse, token)
+        historyUrl = ('https://api.vk.com/method/messages.getHistory?user_id=%s&count=%s&offset=%s&rev=%s&v=5.44&access_token=%s' 
+        ) % (userId, self.count, self.offset, reverse, token)
         history = urllib2.urlopen(historyUrl).read()
         return history
 
@@ -77,21 +75,35 @@ class Auth:
             self.fileName = 'chat' + chatName['first_name'] + chatName['last_name'] + '.txt'
         return user
 
-object = Auth('client id of your app in vk', 'http://oauth.vk.com/blank.html', 'touch', '9999999', 'token', '5.44')
+object = Auth('your vk client-id', 'http://oauth.vk.com/blank.html', 'touch', '9999999', 'token', '5.44')
 
-auth = object.authUrl(object.login, object.password)
+auth = object.authUrl()
 
 giveAccess = object.giveAccess(auth)
 
 token = object.returnToken(giveAccess)
 
-userHistory = json.loads(object.getHistory('id of user to parse messages', '200', '1', token))
+parsing = True
+resultHistory = []
+while (parsing):
+    userHistory = json.loads(object.getHistory('user-id', '1', token))
+    print 'count of found messages: ' + str(len(userHistory['response']['items']))
+    print 'ofsset: ' + str(object.offset)
+    if len(userHistory['response']['items']) >= 199:
+        object.offset += 200
+        resultHistory += userHistory['response']['items']
+        time.sleep(1)
+    else:
+        resultHistory += userHistory['response']['items']
+        parsing = False
+
+print 'total count of found msg\'s: ' + str(len(resultHistory))
 
 chatName = object.getUserName(token)
 
 file_log = open(object.fileName, 'a+')
 
-for item in userHistory['response']['items']:
+for item in resultHistory:
     fromUser = chatName if item.get('from_id') == item.get('user_id') else 'Me: '
     
     date = datetime.datetime.fromtimestamp(int(item.get('date'))).strftime('%d-%m-%Y %H:%M:%S')
@@ -109,7 +121,10 @@ for item in userHistory['response']['items']:
             if attach['type'] == 'sticker':
                 file_log.write('\t' + attach['type'] + ': ' + attach['sticker']['photo_64'])
             elif attach['type'] == 'photo':
-                photoLink = attach['photo']['photo_1280'] if 'photo_1280' in attach['photo'] else attach['photo']['photo_807']
+                photoSizes = ['photo_75', 'photo_130', 'photo_604', 'photo_807', 'photo_1280', 'photo_2560']
+                for size in photoSizes:
+                    if size in attach['photo']:
+                        photoLink = attach['photo'][size]
                 file_log.write('\t' + attach['type'] + ': ' + photoLink)
             elif attach['type'] == 'link':
                 file_log.write('\t' + attach['type'] + ': ' + attach['link']['url'])
