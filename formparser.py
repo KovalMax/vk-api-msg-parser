@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 from HTMLParser import HTMLParser
 
+
 class FormParser(HTMLParser):
     def __init__(self):
         HTMLParser.__init__(self)
@@ -11,7 +12,7 @@ class FormParser(HTMLParser):
         self.form_parsed = False
         self.method = "GET"
 
-    def handle_starttag(self, tag, attrs):
+    def handle_starttag(self, tag, attributes):
         tag = tag.lower()
         if tag == "form":
             if self.form_parsed:
@@ -21,14 +22,14 @@ class FormParser(HTMLParser):
             self.in_form = True
         if not self.in_form:
             return
-        attrs = dict((name.lower(), value) for name, value in attrs)
+        attributes = dict((name.lower(), value) for name, value in attributes)
         if tag == "form":
-            self.url = attrs["action"]
-            if "method" in attrs:
-                self.method = attrs["method"].upper()
-        elif tag == "input" and "type" in attrs and "name" in attrs:
-            if attrs["type"] in ["hidden", "text", "password"]:
-                self.params[attrs["name"]] = attrs["value"] if "value" in attrs else ""
+            self.url = attributes["action"]
+            if "method" in attributes:
+                self.method = attributes["method"].upper()
+        elif tag == "input" and "type" in attributes and "name" in attributes:
+            if attributes["type"] in ["hidden", "text", "password"]:
+                self.params[attributes["name"]] = attributes["value"] if "value" in attributes else ""
 
     def handle_endtag(self, tag):
         tag = tag.lower()
